@@ -38,8 +38,7 @@ static const char *TAG = "i2c-example";
 #define I2C_MASTER_TX_BUF_DISABLE 0                           /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0                           /*!< I2C master doesn't need buffer */
 
-#define BH1750_SENSOR_ADDR CONFIG_BH1750_ADDR   /*!< slave address for BH1750 sensor */
-#define BH1750_CMD_START CONFIG_BH1750_OPMODE   /*!< Operation mode */
+#define ADS1115_SENSOR_ADDRESS ADS1115_ADDRESS   /*!< slave address for BH1750 sensor */
 #define ESP_SLAVE_ADDR CONFIG_I2C_SLAVE_ADDRESS /*!< ESP32 slave address, you can set any 7bit value */
 #define WRITE_BIT I2C_MASTER_WRITE              /*!< I2C master write */
 #define READ_BIT I2C_MASTER_READ                /*!< I2C master read */
@@ -166,19 +165,6 @@ SemaphoreHandle_t print_mux = NULL;
 
 /*=========================================================================*/
 
-/**
- * @brief test code to operate on BH1750 sensor
- *
- * 1. set operation mode(e.g One time L-resolution mode)
- * _________________________________________________________________
- * | start | slave_addr + wr_bit + ack | write 1 byte + ack  | stop |
- * --------|---------------------------|---------------------|------|
- * 2. wait more than 24 ms
- * 3. read data
- * ______________________________________________________________________________________
- * | start | slave_addr + rd_bit + ack | read 1 byte + ack  | read 1 byte + nack | stop |
- * --------|---------------------------|--------------------|--------------------|------|
- */
 static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uint8_t *data_l) {
   // Start with default values
   uint16_t config = ADS1X15_REG_CONFIG_CQUE_NONE |     // Disable the comparator (default val)
@@ -199,37 +185,12 @@ static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uin
   // Set 'start single-conversion' bit
   config |= ADS1X15_REG_CONFIG_OS_SINGLE;
 
-  //   // Write config register to the ADC
-  //   writeRegister(m_i2cAddress, ADS1X15_REG_POINTER_CONFIG, config);
-
-  //   int ret;
-  //   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-  //   i2c_master_start(cmd);
-  //   i2c_master_write_byte(cmd, BH1750_SENSOR_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-  // //   i2c_master_write_byte(cmd, BH1750_CMD_START, ACK_CHECK_EN);
-  //   i2c_master_stop(cmd);
-  //   ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  //   i2c_cmd_link_delete(cmd);
-  //   if (ret != ESP_OK) {
-  //     return ret;
-  //   }
-  //   vTaskDelay(30 / portTICK_RATE_MS);
-  //   cmd = i2c_cmd_link_create();
-  //   i2c_master_start(cmd);
-  //   i2c_master_write_byte(cmd, BH1750_SENSOR_ADDR << 1 | READ_BIT, ACK_CHECK_EN);
-  //   i2c_master_read_byte(cmd, data_h, ACK_VAL);
-  //   i2c_master_read_byte(cmd, data_l, NACK_VAL);
-  //   i2c_master_stop(cmd);
-  //   ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  //   i2c_cmd_link_delete(cmd);
-  //   return ret;
-
   ESP_LOGI(TAG, "Read is %d and write is %d", READ_BIT, WRITE_BIT);
 
   int ret;
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, BH1750_SENSOR_ADDR << 1 | WRITE_BIT, ACK_VAL);
+  i2c_master_write_byte(cmd, ADS1115_SENSOR_ADDRESS << 1 | WRITE_BIT, ACK_VAL);
   i2c_master_write_byte(cmd, ADS1X15_REG_POINTER_CONFIG, ACK_VAL);
   i2c_master_write_byte(cmd, (uint8_t)(config >> 8), ACK_VAL);
   i2c_master_write_byte(cmd, (uint8_t)config, ACK_VAL);
@@ -245,7 +206,7 @@ static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uin
   vTaskDelay(30 / portTICK_RATE_MS);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, BH1750_SENSOR_ADDR << 1 | READ_BIT, ACK_CHECK_EN);
+  i2c_master_write_byte(cmd, ADS1115_SENSOR_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
   i2c_master_read_byte(cmd, data_h, ACK_VAL);
   i2c_master_read_byte(cmd, data_l, ACK_VAL);
   i2c_master_stop(cmd);
@@ -260,10 +221,8 @@ static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uin
   vTaskDelay(30 / portTICK_RATE_MS);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, BH1750_SENSOR_ADDR << 1 | WRITE_BIT, ACK_VAL);
+  i2c_master_write_byte(cmd, ADS1115_SENSOR_ADDRESS << 1 | WRITE_BIT, ACK_VAL);
   i2c_master_write_byte(cmd, ADS1X15_REG_POINTER_CONVERT, ACK_VAL);
-  //   i2c_master_write_byte(cmd, (uint8_t)config, ACK_VAL);
-  //   i2c_master_write_byte(cmd, (uint8_t)(config >> 8), ACK_VAL);
   i2c_master_stop(cmd);
   ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
   i2c_cmd_link_delete(cmd);
@@ -276,7 +235,7 @@ static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uin
   vTaskDelay(30 / portTICK_RATE_MS);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, BH1750_SENSOR_ADDR << 1 | READ_BIT, ACK_CHECK_EN);
+  i2c_master_write_byte(cmd, ADS1115_SENSOR_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
   i2c_master_read_byte(cmd, data_h, ACK_VAL);
   i2c_master_read_byte(cmd, data_l, NACK_VAL);
   i2c_master_stop(cmd);
@@ -329,12 +288,8 @@ static void i2c_test_task(void *arg) {
       ESP_LOGE(TAG, "I2C Timeout");
     } else if (ret == ESP_OK) {
       printf("*******************\n");
-    printf("The voltage is %.02f\n", voltage);
-    //   printf("TASK[%d]  MASTER READ SENSOR( BH1750 )\n", task_idx);
+      printf("The voltage is %.02f\n", voltage);
       printf("*******************\n");
-    //   printf("data_h: %02x\n", sensor_data_h);
-    //   printf("data_l: %02x\n", sensor_data_l);
-    //   printf("sensor val: %.02f [Lux]\n", (sensor_data_h << 8 | sensor_data_l) / 1.2);
     } else {
       ESP_LOGW(TAG, "%s: No ack, sensor not connected...skip...", esp_err_to_name(ret));
     }

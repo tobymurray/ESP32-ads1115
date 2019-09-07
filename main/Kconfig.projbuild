@@ -26,72 +26,10 @@ menu "Example Configuration"
                 I2C Speed of Master device.
     endmenu
 
-    menu "BH1750 Sensor"
-        choice BH1750_ADDR
-            prompt "BH1750 I2C Address"
-            default BH1750_I2C_ADDRESS_LOW
-            help
-                Hardware address of BH1750, which is 2 types, and determined by ADDR terminal.
-
-            config BH1750_I2C_ADDRESS_LOW
-                bool "BH1750 I2C Address(ADDR=0)"
-                help
-                    I2C Address of BH1750 Sensor according to your schemetic configuration.
-
-            config BH1750_I2C_ADDRESS_High
-                bool "BH1750 I2C Address(ADDR=1)"
-                help
-                    I2C Address of BH1750 Sensor according to your schemetic configuration.
-        endchoice
-
-        config BH1750_ADDR
-            hex
+    menu "ADS1115 Sensor"
+        config ADS1115_ADDRESS
+            hex "ADS1115 Address"
             default 0x48
-
-        choice BH1750_MODE
-            prompt "BH1750 Operation Mode"
-            default BH1750_ONETIME_L_RESOLUTION
-            help
-                Operation Mode of BH1750.
-                Different mode means different resolution and measurement time.
-            config BH1750_CONTINU_H_RESOLUTION
-                bool "Continuously H-Resolution Mode"
-                help
-                    Resolution is 1lx, measurement time is typically 120ms.
-            config BH1750_CONTINU_H_RESOLUTION2
-                bool "Continuously H-Resolution Mode2"
-                help
-                    Resolution is 0.5lx, measurement time is typically 120ms.
-            config BH1750_CONTINU_L_RESOLUTION
-                bool "Continuously L-Resolution Mode"
-                help
-                    Resolution is 4lx, measurement time is typically 16ms.
-            config BH1750_ONETIME_H_RESOLUTION
-                bool "One Time H-Resolution Mode"
-                help
-                    Resolution is 1lx, measurement time is typically 120ms.
-                    It is automatically set to Power Down mode after measurement.
-            config BH1750_ONETIME_H_RESOLUTION2
-                bool "One Time H-Resolution Mode2"
-                help
-                    Resolution is 0.5lx, measurement time is typically 120ms.
-                    It is automatically set to Power Down mode after measurement.
-            config BH1750_ONETIME_L_RESOLUTION
-                bool "One Time L-Resolution Mode"
-                help
-                    Resolution is 4lx, measurement time is typically 16ms.
-                    It is automatically set to Power Down mode after measurement.
-        endchoice
-
-        config BH1750_OPMODE
-            hex
-            default 0x10 if BH1750_CONTINU_H_RESOLUTION
-            default 0x11 if BH1750_CONTINU_H_RESOLUTION2
-            default 0x13 if BH1750_CONTINU_L_RESOLUTION
-            default 0x20 if BH1750_ONETIME_H_RESOLUTION
-            default 0x21 if BH1750_ONETIME_H_RESOLUTION2
-            default 0x23 if BH1750_ONETIME_L_RESOLUTION
-
     endmenu
 
 endmenu
