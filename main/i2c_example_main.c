@@ -15,6 +15,8 @@
 #include "driver/i2c.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
+#include "stdlib.h"
+#include "math.h"
 
 static const char *TAG = "i2c-example";
 
@@ -23,7 +25,7 @@ static const char *TAG = "i2c-example";
 
 #define DATA_LENGTH 512                  /*!< Data buffer length of test buffer */
 #define RW_TEST_LENGTH 128               /*!< Data length for r/w test, [0,DATA_LENGTH] */
-#define DELAY_TIME_BETWEEN_ITEMS_MS 1000 /*!< delay time between different test items */
+#define DELAY_TIME_BETWEEN_ITEMS_MS 5000 /*!< delay time between different test items */
 
 #define I2C_SLAVE_SCL_IO CONFIG_I2C_SLAVE_SCL               /*!< gpio number for i2c slave clock */
 #define I2C_SLAVE_SDA_IO CONFIG_I2C_SLAVE_SDA               /*!< gpio number for i2c slave data */
@@ -38,7 +40,7 @@ static const char *TAG = "i2c-example";
 #define I2C_MASTER_TX_BUF_DISABLE 0                           /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0                           /*!< I2C master doesn't need buffer */
 
-#define ADS1115_SENSOR_ADDRESS ADS1115_ADDRESS   /*!< slave address for BH1750 sensor */
+#define ADS1115_ADDRESS CONFIG_ADS1115_ADDRESS  /*!< slave address for BH1750 sensor */
 #define ESP_SLAVE_ADDR CONFIG_I2C_SLAVE_ADDRESS /*!< ESP32 slave address, you can set any 7bit value */
 #define WRITE_BIT I2C_MASTER_WRITE              /*!< I2C master write */
 #define READ_BIT I2C_MASTER_READ                /*!< I2C master read */
@@ -165,6 +167,15 @@ SemaphoreHandle_t print_mux = NULL;
 
 /*=========================================================================*/
 
+#define GPIO_OUTPUT_IO_0 13
+#define GPIO_OUTPUT_PIN_SEL (1ULL << GPIO_OUTPUT_IO_0)
+
+// 3.82 - 3.58
+const float VOLTAGE_DROP_ACROSS_TRANSISTOR = 0.23;
+
+// 3.42 - 2.88
+const float VOLTAGE_DROP_ACROSS_PNP_TRANSISTOR = 0.0;  // No voltage drop between collector and emitter? 0.54;
+
 static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uint8_t *data_l) {
   // Start with default values
   uint16_t config = ADS1X15_REG_CONFIG_CQUE_NONE |     // Disable the comparator (default val)
@@ -190,7 +201,7 @@ static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uin
   int ret;
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, ADS1115_SENSOR_ADDRESS << 1 | WRITE_BIT, ACK_VAL);
+  i2c_master_write_byte(cmd, ADS1115_ADDRESS << 1 | WRITE_BIT, ACK_VAL);
   i2c_master_write_byte(cmd, ADS1X15_REG_POINTER_CONFIG, ACK_VAL);
   i2c_master_write_byte(cmd, (uint8_t)(config >> 8), ACK_VAL);
   i2c_master_write_byte(cmd, (uint8_t)config, ACK_VAL);
@@ -206,7 +217,7 @@ static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uin
   vTaskDelay(30 / portTICK_RATE_MS);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, ADS1115_SENSOR_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
+  i2c_master_write_byte(cmd, ADS1115_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
   i2c_master_read_byte(cmd, data_h, ACK_VAL);
   i2c_master_read_byte(cmd, data_l, ACK_VAL);
   i2c_master_stop(cmd);
@@ -221,7 +232,7 @@ static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uin
   vTaskDelay(30 / portTICK_RATE_MS);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, ADS1115_SENSOR_ADDRESS << 1 | WRITE_BIT, ACK_VAL);
+  i2c_master_write_byte(cmd, ADS1115_ADDRESS << 1 | WRITE_BIT, ACK_VAL);
   i2c_master_write_byte(cmd, ADS1X15_REG_POINTER_CONVERT, ACK_VAL);
   i2c_master_stop(cmd);
   ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
@@ -235,7 +246,7 @@ static esp_err_t i2c_master_sensor_test(i2c_port_t i2c_num, uint8_t *data_h, uin
   vTaskDelay(30 / portTICK_RATE_MS);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, ADS1115_SENSOR_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
+  i2c_master_write_byte(cmd, ADS1115_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
   i2c_master_read_byte(cmd, data_h, ACK_VAL);
   i2c_master_read_byte(cmd, data_l, NACK_VAL);
   i2c_master_stop(cmd);
@@ -262,21 +273,34 @@ static esp_err_t i2c_master_init(void) {
   return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
 }
 
+/**
+ * This isn't a perfect fit, but hopefully it's good enough. This is a linear fit to measurements
+ * taken from https://lygte-info.dk/info/BatteryChargePercent%20UK.html for a NCR18650 3400mAh
+ */
+static float convert_voltage_to_ncr18650_capacity(float voltage) { return 120.1212 * voltage - 399.2545; }
+
 static void i2c_test_task(void *arg) {
   int ret;
   uint32_t task_idx = (uint32_t)arg;
   uint8_t sensor_data_h, sensor_data_l;
   int cnt = 0;
+  int toggle = 0;
+
+  float voltage_divider_fraction = (100000.0 + 68000.0) / 68000.0;
   while (1) {
     ESP_LOGI(TAG, "TASK[%d] test cnt: %d", task_idx, cnt++);
     ret = i2c_master_sensor_test(I2C_MASTER_NUM, &sensor_data_h, &sensor_data_l);
     xSemaphoreTake(print_mux, portMAX_DELAY);
 
+    gpio_set_level(GPIO_OUTPUT_IO_0, toggle);
+    toggle = !toggle;
+
     // Convert the two u_int8_t sensor reading into a single u_int16_t
     u_int16_t raw_measurement = (sensor_data_h << 8 | sensor_data_l);
 
     // Convert the unsigned u_int16_t into a signed integer
-    int raw_measurement_as_signed_int = (0x8000 & raw_measurement ? (int)(0x7FFF & raw_measurement) - 0x8000 : raw_measurement);
+    int raw_measurement_as_signed_int =
+        (0x8000 & raw_measurement ? (int)(0x7FFF & raw_measurement) - 0x8000 : raw_measurement);
 
     // Undo the effect of the gain
     float millivolts_before_gain = raw_measurement_as_signed_int * 0.1875;
@@ -288,7 +312,28 @@ static void i2c_test_task(void *arg) {
       ESP_LOGE(TAG, "I2C Timeout");
     } else if (ret == ESP_OK) {
       printf("*******************\n");
-      printf("The voltage is %.02f\n", voltage);
+      printf("The voltage divider fraction is %0.2f\n", voltage_divider_fraction);
+      printf("Raw voltage is %.02f\n", voltage);
+
+      float absolute_voltage = fabsf(voltage);
+
+      printf("Absolute voltage is %.02f\n", absolute_voltage);
+
+      float actual_voltage;
+      float adjusted_voltage;
+      float battery_charge_level;
+      if (absolute_voltage - 0.001 > 0) {
+        adjusted_voltage = absolute_voltage; // No adjustment?
+        actual_voltage = adjusted_voltage * voltage_divider_fraction;
+        battery_charge_level = convert_voltage_to_ncr18650_capacity(actual_voltage);
+      } else {
+        adjusted_voltage = 0;
+        actual_voltage = 0;
+        battery_charge_level = 0;
+      }
+      printf("Adjusted voltage is %.02f\n", adjusted_voltage);
+      printf("Actual voltage is %.02f\n", actual_voltage);
+      printf("Battery is currently at %.02f%% charge\n", battery_charge_level);
       printf("*******************\n");
     } else {
       ESP_LOGW(TAG, "%s: No ack, sensor not connected...skip...", esp_err_to_name(ret));
@@ -301,6 +346,22 @@ static void i2c_test_task(void *arg) {
 }
 
 void app_main(void) {
+  gpio_config_t io_conf;
+  // disable interrupt
+  io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+  // set as output mode
+  io_conf.mode = GPIO_MODE_OUTPUT;
+  // bit mask of the pins that you want to set,e.g.GPIO18/19
+  io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
+  // disable pull-down mode
+  io_conf.pull_down_en = 0;
+  // disable pull-up mode
+  io_conf.pull_up_en = 0;
+  // configure GPIO with the given settings
+  gpio_config(&io_conf);
+
+  gpio_set_level(GPIO_OUTPUT_IO_0, 1);
+
   print_mux = xSemaphoreCreateMutex();
   ESP_ERROR_CHECK(i2c_master_init());
   xTaskCreate(i2c_test_task, "i2c_test_task_0", 1024 * 2, (void *)0, 10, NULL);
