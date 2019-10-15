@@ -322,7 +322,7 @@ static void i2c_test_task(void *arg) {
       float actual_voltage;
       float adjusted_voltage;
       float battery_charge_level;
-      if (absolute_voltage - 0.001 > 0) {
+      if (absolute_voltage - 0.01 > 0) {
         adjusted_voltage = absolute_voltage; // No adjustment?
         actual_voltage = adjusted_voltage * voltage_divider_fraction;
         battery_charge_level = convert_voltage_to_ncr18650_capacity(actual_voltage);
